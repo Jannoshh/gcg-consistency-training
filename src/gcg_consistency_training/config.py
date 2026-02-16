@@ -22,6 +22,10 @@ class PGDParams(BaseModel):
     seed: int = 42
     eval_every: int = 0  # 0 = only at end
     kl_weight: float = 0.0  # 0 = disabled
+    # Progressive discretization: freeze one position every N steps after warmup
+    progressive_discretize: bool = False
+    discretize_warmup_steps: int = 500  # train fully continuous for this many steps
+    discretize_every: int = 0  # freeze one position every N steps (0 = auto: remaining_steps / remaining_positions)
     train_data_path: str = "data/sycophancy_train.jsonl"
     eval_data_path: str = "data/sycophancy_eval.jsonl"
 

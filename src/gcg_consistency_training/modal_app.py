@@ -122,6 +122,8 @@ def run_pgd_training(
     eval_every: int = 100,
     kl_weight: float = 0.0,
     entropy_anneal_steps: int = 250,
+    progressive_discretize: bool = False,
+    discretize_warmup_steps: int = 500,
 ) -> dict:
     """Run PGD suffix optimization on Modal GPU."""
     import json
@@ -140,6 +142,8 @@ def run_pgd_training(
     config.pgd.eval_every = eval_every
     config.pgd.kl_weight = kl_weight
     config.pgd.entropy_anneal_steps = entropy_anneal_steps
+    config.pgd.progressive_discretize = progressive_discretize
+    config.pgd.discretize_warmup_steps = discretize_warmup_steps
 
     wandb.init(
         entity="janneselstner",
@@ -217,6 +221,8 @@ def main(
     kl_weight: float = 0.0,
     pgd_suffix: str = "",
     entropy_anneal_steps: int = 500,
+    progressive_discretize: bool = False,
+    discretize_warmup_steps: int = 500,
 ):
     """Entry point for `modal run`.
 
@@ -258,6 +264,8 @@ def main(
             eval_every=eval_every,
             kl_weight=kl_weight,
             entropy_anneal_steps=entropy_anneal_steps,
+            progressive_discretize=progressive_discretize,
+            discretize_warmup_steps=discretize_warmup_steps,
         )
 
         print(f"\nBest suffix: {result['best_suffix_str']}")

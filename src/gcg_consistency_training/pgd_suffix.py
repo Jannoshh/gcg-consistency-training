@@ -676,11 +676,25 @@ class PGDSuffixOptimizer:
         for i, resp in enumerate(ref_responses):
             train_data[i]["_reference_response"] = resp
 
+        # Progressive discretization state
+        frozen_mask = torch.zeros(
+            self.pgd.suffix_length, dtype=torch.bool, device=self.device
+        )  # True = position is frozen (discretized)
+        n_frozen = 0
+        prog_disc = self.pgd.progressive_discretize
+        disc_warmup = self.pgd.discretize_warmup_steps
+        disc_every = self.pgd.discretize_every
+        if prog_disc and disc_every <= 0:
+            # Auto: spread discretization evenly over remaining steps
+            remaining_steps = self.pgd.num_steps - disc_warmup
+            disc_every = max(1, remaining_steps // self.pgd.suffix_length)
+
         logger.info(
             f"Starting PGD optimization: {self.pgd.num_steps} steps, "
             f"suffix_len={self.pgd.suffix_length}, lr={self.pgd.lr}, "
             f"batch_size={self.pgd.batch_size}, train_samples={n_train}, "
             f"kl_weight={kl_weight}"
+            f"{f', progressive_discretize every {disc_every} steps after {disc_warmup} warmup' if prog_disc else ''}"
         )
 
         for step in tqdm(range(self.pgd.num_steps), desc="PGD"):
@@ -717,6 +731,9 @@ class PGDSuffixOptimizer:
                 grad = factors.grad
                 if self.disallowed_tokens is not None:
                     grad[:, self.disallowed_tokens] = 0.0
+                # Zero gradients for frozen positions
+                if n_frozen > 0:
+                    grad[frozen_mask] = 0.0
                 norm = torch.linalg.norm(grad, dim=-1, keepdim=True)
                 grad_clipped = torch.where(
                     norm > self.pgd.grad_clip,
@@ -743,7 +760,46 @@ class PGDSuffixOptimizer:
                         )
                     )
 
-            # 10. Discretize and compute discrete loss
+                # Re-enforce frozen positions after projections
+                if n_frozen > 0:
+                    frozen_indices = torch.where(frozen_mask)[0]
+                    for fi in frozen_indices:
+                        tok = factors.data[fi].argmax().item()
+                        factors.data[fi] = 0.0
+                        factors.data[fi, tok] = 1.0
+
+            # 10. Progressive discretization: freeze most confident position
+            if (
+                prog_disc
+                and step >= disc_warmup
+                and n_frozen < self.pgd.suffix_length
+                and (step - disc_warmup) % disc_every == 0
+            ):
+                with torch.no_grad():
+                    # Find most confident unfrozen position (lowest entropy)
+                    unfrozen = ~frozen_mask
+                    # Entropy per position: -sum(p * log(p))
+                    p = factors.data[unfrozen]
+                    log_p = torch.log(p + self.eps)
+                    entropies = -(p * log_p).sum(-1)
+                    # Pick the position with lowest entropy
+                    unfrozen_indices = torch.where(unfrozen)[0]
+                    best_local = entropies.argmin()
+                    best_pos = unfrozen_indices[best_local].item()
+                    # Snap to one-hot
+                    best_token = factors.data[best_pos].argmax().item()
+                    factors.data[best_pos] = 0.0
+                    factors.data[best_pos, best_token] = 1.0
+                    frozen_mask[best_pos] = True
+                    n_frozen += 1
+                    token_str = self.tokenizer.decode([best_token])
+                    logger.info(
+                        f"Step {step}: froze position {best_pos} -> "
+                        f"token {best_token} '{token_str}' "
+                        f"({n_frozen}/{self.pgd.suffix_length} frozen)"
+                    )
+
+            # 11. Discretize and compute discrete loss
             relaxed_loss = ce_loss.item()
             kl_loss_scalar = kl_loss_val.item()
             all_losses.append(relaxed_loss)
@@ -778,6 +834,7 @@ class PGDSuffixOptimizer:
                     "pgd/kl_loss": kl_loss_scalar,
                     "pgd/total_loss": loss.item(),
                     "pgd/step": step,
+                    "pgd/n_frozen": n_frozen,
                 }
                 wandb_run.log(log_dict, step=step)
 

@@ -19,17 +19,16 @@ PGD maintains a continuous distribution over the vocabulary for each suffix posi
 
 The soft embeddings work — they reduce the loss to ~0.7, meaning the model with continuous suffix vectors largely produces the correct response. But the discretized tokens don't transfer this effect.
 
-### Training dynamics (100-token suffix)
+### Progressive discretization
 
-| Step | Soft Loss | Discrete Loss | Best Discrete Loss |
-|---|---|---|---|
-| 0 | 15.38 | 17.08 | 17.08 |
-| 50 | 1.69 | 19.14 | 9.04 |
-| 300 | 1.06 | 16.59 | 7.56 |
-| 700 | 1.67 | 15.19 | 4.75 |
-| 1250 | 0.69 | 11.60 | 4.75 |
+We also tried freezing suffix positions one at a time (most confident first) instead of argmax-ing all at once, hoping the remaining positions could adapt. This didn't help — the best discrete loss was 4.40 (100 tokens) and 6.35 (40 tokens), both comparable to the all-at-once baseline.
 
-The discrete loss at any given step is high (10-19) because argmax picks bad tokens. The best discrete loss (4.75) was found at one lucky step, but doesn't improve further despite soft loss continuing to decrease.
+| Configuration | Soft Loss | Best Discrete Loss |
+|---|---|---|
+| 100-token, progressive | 0.87 | 4.40 |
+| 40-token, progressive | ~10-16 | 6.35 |
+
+As positions freeze, the relaxed loss climbs because the optimizer runs out of free positions to compensate for locked-in bad tokens.
 
 ## Replication
 
