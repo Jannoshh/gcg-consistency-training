@@ -15,19 +15,21 @@ PGD maintains a continuous distribution over the vocabulary for each suffix posi
 | Configuration | Soft Loss | Discrete Loss | Sycophancy Rate |
 |---|---|---|---|
 | 25-token suffix, 2000 steps | ~2-3 | 6.25 | No improvement |
-| 100-token suffix, 2000 steps | ~1.0 | 4.75 | No improvement |
+| 100-token suffix, 1300 steps | 0.69 | 4.75 (best) | No improvement |
 
-The soft embeddings work — they reduce the loss to ~1.0, meaning the model with continuous suffix vectors largely produces the correct response. But the discretized tokens don't transfer this effect. The gap between soft and discrete loss is consistently >90%.
+The soft embeddings work — they reduce the loss to ~0.7, meaning the model with continuous suffix vectors largely produces the correct response. But the discretized tokens don't transfer this effect.
 
 ### Training dynamics (100-token suffix)
 
-| Step | Soft Loss | Discrete Loss |
-|---|---|---|
-| 0 | 15.38 | 17.08 |
-| 50 | 1.69 | 19.14 |
-| 300 | 1.06 | 16.59 |
-| 1050 | 0.70 | 11.78 |
-| 1250 | 0.69 | 11.60 |
+| Step | Soft Loss | Discrete Loss | Best Discrete Loss |
+|---|---|---|---|
+| 0 | 15.38 | 17.08 | 17.08 |
+| 50 | 1.69 | 19.14 | 9.04 |
+| 300 | 1.06 | 16.59 | 7.56 |
+| 700 | 1.67 | 15.19 | 4.75 |
+| 1250 | 0.69 | 11.60 | 4.75 |
+
+The discrete loss at any given step is high (10-19) because argmax picks bad tokens. The best discrete loss (4.75) was found at one lucky step, but doesn't improve further despite soft loss continuing to decrease.
 
 ## Replication
 
@@ -48,9 +50,9 @@ modal setup
 ### Run PGD training
 
 ```bash
-modal run --detach src/gcg_eval/modal_app.py --limit 500
+modal run --detach src/gcg_consistency_training/modal_app.py --limit 500
 
-modal run --detach src/gcg_eval/modal_app.py \
+modal run --detach src/gcg_consistency_training/modal_app.py \
     --suffix-length 100 \
     --num-steps 2000 \
     --entropy-anneal-steps 500 \
@@ -61,7 +63,7 @@ modal run --detach src/gcg_eval/modal_app.py \
 ### Evaluate a suffix
 
 ```bash
-modal run src/gcg_eval/modal_app.py \
+modal run src/gcg_consistency_training/modal_app.py \
     --mode pgd-eval \
     --pgd-suffix "your suffix string" \
     --limit 50

@@ -8,8 +8,6 @@ build/
 *.bin
 *.safetensors
 wandb/
-data/
-*.jsonl
 .env
 .env.*
 uv.lock
